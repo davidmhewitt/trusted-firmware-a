@@ -68,6 +68,22 @@ __attribute__ ((section("tzfw_coherent_mem")))
 #endif
 ;/* coheront */
 
+void rockchip_soc_sys_pd_pwr_dn_wfi(void)
+{
+	INFO ("PMU_CORE_PWR_ST = 0x%x\n",
+	      mmio_read_32(PMU_BASE + PMU_CORE_PWR_ST));
+	INFO ("PMU_PWRMODE_CON = 0x%x\n",      
+	      mmio_read_32(PMU_BASE + PMU_PWRMODE_CON));
+	INFO ("PMU_PWRDN_ST = 0x%x\n",      
+	      mmio_read_32(PMU_BASE + PMU_PWRDN_ST));
+	INFO ("PMU_BUS_IDLE_ST = 0x%x\n",      
+	      mmio_read_32(PMU_BASE + PMU_BUS_IDLE_ST));
+	      
+	psci_power_down_wfi();
+	
+	INFO ("After WFI");
+}
+
 static void pmu_bus_idle_req(uint32_t bus, uint32_t state)
 {
 	uint32_t bus_id = BIT(bus);
@@ -346,11 +362,11 @@ static void pmu_power_domains_suspend(void)
 	pmu_set_power_domain(PD_RGA, pmu_pd_off);
 	pmu_set_power_domain(PD_VCODEC, pmu_pd_off);
 	pmu_set_power_domain(PD_VDU, pmu_pd_off);
-	pmu_set_power_domain(PD_USB3, pmu_pd_off);
-	pmu_set_power_domain(PD_EMMC, pmu_pd_off);
-	pmu_set_power_domain(PD_VIO, pmu_pd_off);
-	pmu_set_power_domain(PD_SD, pmu_pd_off);
-	pmu_set_power_domain(PD_PERIHP, pmu_pd_off);
+//	pmu_set_power_domain(PD_USB3, pmu_pd_off);
+//	pmu_set_power_domain(PD_EMMC, pmu_pd_off);
+//	pmu_set_power_domain(PD_VIO, pmu_pd_off);
+//	pmu_set_power_domain(PD_SD, pmu_pd_off);
+//	pmu_set_power_domain(PD_PERIHP, pmu_pd_off);
 	clk_gate_con_restore();
 }
 
@@ -858,8 +874,8 @@ static void sys_slp_config(void)
 		      BIT_WITH_WMSK(PMU_CLR_GIC2_CORE_L_HW));
 
 	slp_mode_cfg = BIT(PMU_PWR_MODE_EN) |
-		       BIT(PMU_WKUP_RST_EN) |
-		       BIT(PMU_INPUT_CLAMP_EN) |
+	//	       BIT(PMU_WKUP_RST_EN) |
+	//	       BIT(PMU_INPUT_CLAMP_EN) |
 		       BIT(PMU_POWER_OFF_REQ_CFG) |
 		       BIT(PMU_CPU0_PD_EN) |
 		       BIT(PMU_L2_FLUSH_EN) |
@@ -877,13 +893,17 @@ static void sys_slp_config(void)
 		       BIT(PMU_DDRIO1_RET_EN) |
 		       BIT(PMU_DDRIO1_RET_DE_REQ) |
 		       BIT(PMU_CENTER_PD_EN) |
-		       BIT(PMU_PERILP_PD_EN) |
-		       BIT(PMU_CLK_PERILP_SRC_GATE_EN) |
+	//	       BIT(PMU_PERILP_PD_EN) |
+	//	       BIT(PMU_CLK_PERILP_SRC_GATE_EN) |
 		       BIT(PMU_PLL_PD_EN) |
 		       BIT(PMU_CLK_CENTER_SRC_GATE_EN) |
-		       BIT(PMU_OSC_DIS) |
+	//	       BIT(PMU_OSC_DIS) |
 		       BIT(PMU_PMU_USE_LF);
-
+		       
+	mmio_setbits_32(PMU_BASE + PMU_WKUP_CFG1, BIT(PMU_GPIO0A_NEGEDGE_WKUP_EN + 5));
+	mmio_setbits_32(PMU_BASE + PMU_INT_CON, BIT(PMU_PMU_INT_EN) | BIT(PMU_PWRMD_WKUP_INT_EN) | BIT(PMU_WKUP_GPIO0_NEG_INT_EN));
+	mmio_setbits_32(PMU_BASE + PMU_GPIO0_NEG_INT_CON, BIT(PMU_GPIO0A_NEG_INT_EN + 5));
+	
 	mmio_setbits_32(PMU_BASE + PMU_WKUP_CFG4, BIT(PMU_GPIO_WKUP_EN));
 	mmio_write_32(PMU_BASE + PMU_PWRMODE_CON, slp_mode_cfg);
 
@@ -1363,10 +1383,11 @@ int rockchip_soc_sys_pwr_dm_suspend(void)
 		    BIT(PMU_CLR_CCIM0) |
 		    BIT(PMU_CLR_CCIM1) |
 		    BIT(PMU_CLR_CENTER) |
-		    BIT(PMU_CLR_PERILP) |
-		    BIT(PMU_CLR_PERILPM0) |
+	//	    BIT(PMU_CLR_PERILP) |
+	//	    BIT(PMU_CLR_PERILPM0) |
 		    BIT(PMU_CLR_GIC));
 	set_pmu_rsthold();
+	
 	sys_slp_config();
 
 	m0_configure_execute_addr(M0PMU_BINCODE_BASE);
@@ -1396,7 +1417,6 @@ int rockchip_soc_sys_pwr_dm_suspend(void)
 		}
 		udelay(1);
 	}
-	mmio_setbits_32(PMU_BASE + PMU_PWRDN_CON, BIT(PMU_SCU_B_PWRDWN_EN));
 
 	wdt_register_save();
 	secure_watchdog_gate();
@@ -1406,7 +1426,7 @@ int rockchip_soc_sys_pwr_dm_suspend(void)
 	 * the last steps in suspend.
 	 */
 	disable_dvfs_plls();
-	disable_pwms();
+	//disable_pwms();
 	disable_nodvfs_plls();
 
 	suspend_apio();
@@ -1422,6 +1442,14 @@ int rockchip_soc_sys_pwr_dm_suspend(void)
 
 int rockchip_soc_sys_pwr_dm_resume(void)
 {
+	gpio_set_value(32 + 24 + 1, GPIO_LEVEL_LOW);
+	gpio_set_direction(32 + 24 + 1, GPIO_DIR_IN);
+	
+	gpio_set_value(32 + 16 + 6, GPIO_LEVEL_LOW);
+	gpio_set_direction(32 + 16 + 6, GPIO_DIR_IN);
+
+	INFO ("Resumed CPU and GPU power\n");
+		
 	uint32_t wait_cnt = 0;
 	uint32_t status = 0;
 
